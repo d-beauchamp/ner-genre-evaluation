@@ -35,7 +35,7 @@ print("Done.")
 
 print("loading OntoNotes dataset from local files...")
 
-f = "OntoNotes/dataset/train00.json"
+f = "OntoNotes/dataset/test.json"
 
 ontonotes_dataset = Dataset.from_json(f)
 

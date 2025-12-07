@@ -3,15 +3,15 @@
   "citation": "",
   "config_name": "default",
   "dataset_name": "json",
-  "dataset_size": 6381092,
+  "dataset_size": 2545136,
   "description": "",
   "download_checksums": {
-    "/Users/samshelly/Desktop/School Work/CMPU 366/Final Project/OntoNotes/dataset/train00.json": {
-      "num_bytes": 4744562,
+    "/Users/samshelly/Desktop/School Work/CMPU 366/Final Project/OntoNotes/dataset/test.json": {
+      "num_bytes": 1915230,
       "checksum": null
     }
   },
-  "download_size": 4744562,
+  "download_size": 1915230,
   "features": {
     "tags": {
       "feature": {
@@ -44,12 +44,12 @@
   },
   "homepage": "",
   "license": "",
-  "size_in_bytes": 11125654,
+  "size_in_bytes": 4460366,
   "splits": {
     "train": {
       "name": "train",
-      "num_bytes": 6381092,
-      "num_examples": 15000,
+      "num_bytes": 2545136,
+      "num_examples": 8262,
       "dataset_name": "json"
     }
   },
