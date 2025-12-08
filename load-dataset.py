@@ -85,6 +85,16 @@ print("Done.")
 
 print("Simplifying labels...")
 
+def reduce_labels(dataset):
+    reduced = []
+    for label in dataset["labels"]:
+        if label.endswith("PER") or label.endswith("LOC") or label.endswith("ORG"):
+            reduced.append(label)
+        else:
+            reduced.append("O")
+    dataset["reduced_labels"] = reduced
+    return dataset
+
 def simplify_labels(dataset):
     simple = []
     for label in dataset["labels"]:
@@ -99,9 +109,13 @@ def simplify_labels(dataset):
     dataset["simple_labels"] = simple
     return dataset
 
+print("Done.")
+print("mapping and saving datasets...")
 litbank_dataset = litbank_dataset.map(simplify_labels)
+litbank_dataset = litbank_dataset.map(reduce_labels)
 litbank_dataset.save_to_disk("converted_datasets/litbank_dataset")
 ontonotes_dataset = ontonotes_dataset.map(simplify_labels)
+ontonotes_dataset = ontonotes_dataset.map(reduce_labels)
 ontonotes_dataset.save_to_disk("converted_datasets/ontonotes_dataset")
 
-print("Done.")
+print("Datasets saved to disk.")
