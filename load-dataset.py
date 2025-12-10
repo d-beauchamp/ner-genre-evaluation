@@ -1,43 +1,7 @@
-import argparse
-import glob
-from pathlib import Path
-import re
-import sys
-import pandas as pd
-
 #!/usr/bin/env python3
 
 from datasets import Dataset
-
-print("loading Litbank dataset from local files...")
-
-all_data_litbank = []
-
-for f in glob.glob("LitBank/entities/tsv/*.tsv"):
-    tokens = [] 
-    labels = [] 
-    with open(f, "r", encoding="utf-8") as file: 
-        for line in file: 
-            line = line.strip()
-            if not line:
-                continue 
-            parts = line.split("\t")
-            if len(parts) < 2:
-                continue
-            tokens.append(parts[0])
-            labels.append(parts[1])
-    if tokens:
-        all_data_litbank.append({"tokens": tokens, "labels": labels})
-
-litbank_dataset = Dataset.from_list(all_data_litbank)
-
-print("Done.")
-
-print("loading OntoNotes dataset from local files...")
-
-f = "OntoNotes/dataset/test.json"
-
-ontonotes_dataset = Dataset.from_json(f)
+import glob
 
 ontonotes_id2label = {
     0: "O",
@@ -79,11 +43,30 @@ ontonotes_id2label = {
     36: "I-LANGUAGE"
 }
 
-ontonotes_dataset = ontonotes_dataset.map(lambda x: {"labels": [ontonotes_id2label.get(t) for t in x["tags"]]})
+def load_litbank_data(path: str) -> Dataset:
+    all_data_litbank = []
+    for f in glob.glob(path):
+        tokens = [] 
+        labels = [] 
+        with open(f, "r", encoding="utf-8") as file: 
+            for line in file: 
+                line = line.strip()
+                if not line:
+                    continue 
+                parts = line.split("\t")
+                if len(parts) < 2:
+                    continue
+                tokens.append(parts[0])
+                labels.append(parts[1])
+        if tokens:
+            all_data_litbank.append({"tokens": tokens, "labels": labels})
 
-print("Done.")
+    return Dataset.from_list(all_data_litbank)
 
-print("Simplifying labels...")
+def load_ontonotes_data(path: str) -> Dataset:
+    ontonotes_dataset = Dataset.from_json(path)
+    return ontonotes_dataset.map(lambda x: {"labels": [ontonotes_id2label.get(t) for t in x["tags"]]})
+
 
 def reduce_labels(dataset):
     reduced = []
@@ -111,12 +94,23 @@ def simplify_labels(dataset):
     dataset["simple_labels"] = simple
     return dataset
 
-print("Done.")
+
 print("mapping and saving datasets...")
-litbank_dataset = litbank_dataset.map(simplify_labels)
-litbank_dataset = litbank_dataset.map(reduce_labels)
-litbank_dataset.save_to_disk("converted_datasets/litbank_dataset")
-ontonotes_dataset = ontonotes_dataset.map(simplify_labels)
-ontonotes_dataset = ontonotes_dataset.map(reduce_labels)
-ontonotes_dataset.save_to_disk("converted_datasets/ontonotes_dataset")
+
+litbank_dataset_test = load_litbank_data("LitBank/entities/tsv/*.tsv")
+litbank_dataset_test = litbank_dataset_test.map(simplify_labels)
+litbank_dataset_test = litbank_dataset_test.map(reduce_labels)
+litbank_dataset_test.save_to_disk("converted_datasets/litbank_dataset_test")
+
+ontonotes_dataset_test = load_ontonotes_data("OntoNotes/dataset/test.json")
+ontonotes_dataset_test = ontonotes_dataset_test.map(simplify_labels)
+ontonotes_dataset_test = ontonotes_dataset_test.map(reduce_labels)
+ontonotes_dataset_test.save_to_disk("converted_datasets/ontonotes_dataset_test")
+
+for split in ["00", "01", "02", "03"]:
+    ontonotes_dataset_train = load_ontonotes_data(f"OntoNotes/dataset/train{split}.json")
+    ontonotes_dataset_train = ontonotes_dataset_train.map(simplify_labels)
+    ontonotes_dataset_train = ontonotes_dataset_train.map(reduce_labels)
+    ontonotes_dataset_train.save_to_disk(f"converted_datasets/ontonotes_dataset_train{split}")
+
 print("Datasets saved to disk.")
