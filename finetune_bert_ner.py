@@ -9,7 +9,7 @@ from transformers import (AutoTokenizer, AutoModelForTokenClassification,
 from datasets import Dataset, load_from_disk, concatenate_datasets
 
 # Perchance create a separate dataloader file to avoid these imports and stuff
-from bert_ner import litbank_data, split_data
+from eval_bert_ner import litbank_data, split_data
 
 label2id = {"O": 0, "B-PER": 1, "I-PER": 2, "B-LOC": 3, "I-LOC": 4, "B-ORG": 5, "I-ORG": 6}
 id2label = {0: "O", 1: "B-PER", 2: "I-PER", 3: "B-LOC", 4: "I-LOC", 5: "B-ORG", 6: "I-ORG"}
@@ -64,17 +64,17 @@ def tokenize_and_align(texts, labels):
     features = Dataset.from_list(encodings)
     return features
 
+
 def main():
     litbank_split = split_data(litbank_data)
     litbank_train = litbank_split[0]
     litbank_train_labels = litbank_split[2]
 
-    ontonotes_sets = ["ontonotes_dataset_train00", "ontonotes_dataset_train00"]
+    ontonotes_sets = ["ontonotes_dataset_train00", "ontonotes_dataset_train01"]
     ontonotes_train, ontonotes_labels = combine_and_extract_train_sets(ontonotes_sets)
 
     litbank_feats = tokenize_and_align(litbank_train, litbank_train_labels)
     ontonotes_feats = tokenize_and_align(ontonotes_train, ontonotes_labels)
-    print(ontonotes_feats[0])
     mixed_feats = concatenate_datasets([litbank_feats, ontonotes_feats])
 
     training_args = TrainingArguments(
@@ -95,8 +95,12 @@ def main():
     )
 
     # trainer.train()
-    # trainer.save_model("./finetuned_model")
-    # tokenizer.save_pretrained("./finetuned_model")
+
+    finetuned_tokenizer = AutoTokenizer.from_pretrained("./results/checkpoint-11280")
+    finetuned_model = AutoModelForTokenClassification.from_pretrained("./results/checkpoint-11280")
+
+    finetuned_tokenizer.save_pretrained("./finetuned_model")
+    finetuned_model.save_pretrained("./finetuned_model")
 
 
 if __name__ == "__main__":

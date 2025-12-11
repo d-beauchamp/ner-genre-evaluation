@@ -4,17 +4,20 @@ import torch
 from datasets import load_from_disk
 from seqeval.metrics import classification_report
 
+# TODO: remove MISC from test data to have direct comparison w/ finetuned labels
+
 device = "cpu"
 if torch.cuda.is_available():
     device = "cuda"
 
-tokenizer = AutoTokenizer.from_pretrained("dslim/distilbert-NER")
-model = AutoModelForTokenClassification.from_pretrained("dslim/distilbert-NER")
+baseline_tokenizer = AutoTokenizer.from_pretrained("dslim/distilbert-NER")
+baseline_model = AutoModelForTokenClassification.from_pretrained("dslim/distilbert-NER")
 
 finetuned_tokenizer = AutoTokenizer.from_pretrained("./finetuned_model")
 finetuned_model = AutoModelForTokenClassification.from_pretrained("./finetuned_model")
 
-model.eval()
+baseline_model.eval()
+finetuned_model.eval()
 
 litbank_data = load_from_disk("converted_datasets/litbank_dataset_test")
 # OntoNotes is test set only - no split needed
@@ -29,6 +32,7 @@ def chunk_tokens(tokens, max_len=510):
     for i in range(0, len(tokens), max_len):
         chunks.append(tokens[i:i + max_len])
     return chunks
+
 
 def align_predictions(pred_ids, encoding, model):
     """Maps subword predictions back to original token."""
@@ -51,6 +55,7 @@ def align_predictions(pred_ids, encoding, model):
         labels.append(temp_labels[0])
     return labels
 
+
 def split_data(dataset):
     tokens = dataset["tokens"]
     labels = dataset["reduced_labels"]
@@ -59,19 +64,7 @@ def split_data(dataset):
     return X_train, X_test, y_train, y_test
 
 
-def prep_bert_data(data):
-    features = []
-    for sentence_tokens in data:
-        chunks = chunk_tokens(sentence_tokens, max_len=510)  # BERT limit 512
-
-        for chunk in chunks:
-            encoding = tokenizer(text=chunk,return_tensors="pt",is_split_into_words=True,
-                                 truncation=True, max_length=512, padding=False)
-            features.append(encoding)
-    return features
-
-
-def model_eval(data):
+def predictions(data, tokenizer, model):
     all_preds = []
 
     for sentence_tokens in data:
@@ -79,10 +72,10 @@ def model_eval(data):
         chunks = chunk_tokens(sentence_tokens, max_len=510)  # BERT limit 512
 
         for chunk in chunks:
-            encoding = finetuned_tokenizer(chunk, return_tensors="pt", is_split_into_words=True,
+            encoding = tokenizer(chunk, return_tensors="pt", is_split_into_words=True,
                                  truncation=True, padding=False)
             with torch.no_grad():
-                outputs = finetuned_model(**encoding)
+                outputs = model(**encoding)
                 logits = outputs.logits
                 pred_ids = torch.argmax(logits, dim=-1)
                 pred_labels = align_predictions(pred_ids, encoding, model)
@@ -96,27 +89,31 @@ def model_eval(data):
         all_preds.append(sentence_preds)
     return all_preds
 
-def main():
-    # print((litbank_data[0]))
 
+def model_eval(tokenizer, model, test_set, labels):
+    """Abstract the evaluation process to allow tests with different models and datasets."""
+    preds = predictions(test_set, tokenizer, model)
+    print(classification_report(labels, preds))
+
+
+def main():
     litbank_split = split_data(litbank_data)
-    litbank_train = litbank_split[0]
-    litbank_train_labels = litbank_split[2]
 
     litbank_test, litbank_labels = litbank_split[1], litbank_split[3]
     ontonotes_test, ontonotes_labels = ontonotes_data["tokens"], ontonotes_data["reduced_labels"] # TEST Labels
 
-    litbank_preds = model_eval(litbank_test)
-    ontonotes_preds = model_eval(ontonotes_test)
+    print("LitBank Evaluation (Baseline):")
+    model_eval(baseline_tokenizer, baseline_model, litbank_test, litbank_labels)
 
-    print("Litbank Evaluation:")
-    print(classification_report(litbank_labels, litbank_preds))
+    print("OntoNotes Evaluation (Baseline):")
+    model_eval(baseline_tokenizer, baseline_model, ontonotes_test, ontonotes_labels)
 
-    print("OntoNotes Evaluation:")
-    print(classification_report(ontonotes_labels, ontonotes_preds))
+    print("LitBank Evaluation (Finetuned):")
+    model_eval(finetuned_tokenizer, finetuned_model, litbank_test, litbank_labels)
+
+    print("OntoNotes Evaluation (Finetuned):")
+    model_eval(finetuned_tokenizer, finetuned_model, ontonotes_test, ontonotes_labels)
 
 
 if __name__ == "__main__":
     main()
-    # print(litbank_data[:2])
-
