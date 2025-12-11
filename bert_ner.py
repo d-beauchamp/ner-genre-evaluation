@@ -11,11 +11,14 @@ if torch.cuda.is_available():
 tokenizer = AutoTokenizer.from_pretrained("dslim/distilbert-NER")
 model = AutoModelForTokenClassification.from_pretrained("dslim/distilbert-NER")
 
+finetuned_tokenizer = AutoTokenizer.from_pretrained("./finetuned_model")
+finetuned_model = AutoModelForTokenClassification.from_pretrained("./finetuned_model")
+
 model.eval()
 
-litbank_data = load_from_disk("converted_datasets/litbank_dataset")
+litbank_data = load_from_disk("converted_datasets/litbank_dataset_test")
 # OntoNotes is test set only - no split needed
-ontonotes_data = load_from_disk("converted_datasets/ontonotes_dataset")
+ontonotes_data = load_from_disk("converted_datasets/ontonotes_dataset_test")
 
 
 def chunk_tokens(tokens, max_len=510):
@@ -28,20 +31,17 @@ def chunk_tokens(tokens, max_len=510):
     return chunks
 
 def align_predictions(pred_ids, encoding, model):
-    """
-    Maps subword predictions back to original tokens
-    """
-    word_ids = encoding.word_ids()  # Maps each WordPiece token -> original word index
+    """Maps subword predictions back to original token."""
+    word_ids = encoding.word_ids()
     previous_word_idx = None
     labels = []
     temp_labels = []
 
     for idx, word_idx in enumerate(word_ids):
         if word_idx is None:
-            continue  # Skip special tokens ([CLS], [SEP])
+            continue
         if word_idx != previous_word_idx:
             if temp_labels:
-                # Take first subword label as the word label
                 labels.append(temp_labels[0])
                 temp_labels = []
             previous_word_idx = word_idx
@@ -58,6 +58,7 @@ def split_data(dataset):
                                                         test_size=0.2, random_state=42)
     return X_train, X_test, y_train, y_test
 
+
 def prep_bert_data(data):
     features = []
     for sentence_tokens in data:
@@ -69,6 +70,7 @@ def prep_bert_data(data):
             features.append(encoding)
     return features
 
+
 def model_eval(data):
     all_preds = []
 
@@ -77,10 +79,10 @@ def model_eval(data):
         chunks = chunk_tokens(sentence_tokens, max_len=510)  # BERT limit 512
 
         for chunk in chunks:
-            encoding = tokenizer(chunk, return_tensors="pt", is_split_into_words=True,
+            encoding = finetuned_tokenizer(chunk, return_tensors="pt", is_split_into_words=True,
                                  truncation=True, padding=False)
             with torch.no_grad():
-                outputs = model(**encoding)
+                outputs = finetuned_model(**encoding)
                 logits = outputs.logits
                 pred_ids = torch.argmax(logits, dim=-1)
                 pred_labels = align_predictions(pred_ids, encoding, model)
@@ -96,7 +98,10 @@ def model_eval(data):
 
 def main():
     # print((litbank_data[0]))
+
     litbank_split = split_data(litbank_data)
+    litbank_train = litbank_split[0]
+    litbank_train_labels = litbank_split[2]
 
     litbank_test, litbank_labels = litbank_split[1], litbank_split[3]
     ontonotes_test, ontonotes_labels = ontonotes_data["tokens"], ontonotes_data["reduced_labels"] # TEST Labels
@@ -110,6 +115,8 @@ def main():
     print("OntoNotes Evaluation:")
     print(classification_report(ontonotes_labels, ontonotes_preds))
 
+
 if __name__ == "__main__":
     main()
-    # print(ontonotes_data)
+    # print(litbank_data[:2])
+
