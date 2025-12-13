@@ -6,9 +6,12 @@ from seqeval.metrics import classification_report
 
 # TODO: remove MISC from test data to have direct comparison w/ finetuned labels
 
+# GPU acceleration on Mac M1 using mps
 device = "cpu"
-if torch.cuda.is_available():
-    device = "cuda"
+available = torch.backends.mps.is_available()
+built = torch.backends.mps.is_built()
+if available and built:
+    device = "mps"
 
 baseline_tokenizer = AutoTokenizer.from_pretrained("dslim/distilbert-NER")
 baseline_model = AutoModelForTokenClassification.from_pretrained("dslim/distilbert-NER")
@@ -16,17 +19,18 @@ baseline_model = AutoModelForTokenClassification.from_pretrained("dslim/distilbe
 finetuned_tokenizer = AutoTokenizer.from_pretrained("./finetuned_model")
 finetuned_model = AutoModelForTokenClassification.from_pretrained("./finetuned_model")
 
-baseline_model.eval()
-finetuned_model.eval()
+baseline_model.to(device).eval()
+finetuned_model.to(device).eval()
 
 litbank_data = load_from_disk("converted_datasets/litbank_dataset_test")
 # OntoNotes is test set only - no split needed
 ontonotes_data = load_from_disk("converted_datasets/ontonotes_dataset_test")
 
 
-def chunk_tokens(tokens, max_len=510):
+def chunker(tokens, max_len=50):
     """
-    Split token list into chunks <= max_len (leave room for [CLS] + [SEP])
+    Split token list into chunks under max BERT length of 512, leaving room for
+    CLS and SEP.
     """
     chunks = []
     for i in range(0, len(tokens), max_len):
@@ -67,26 +71,24 @@ def split_data(dataset):
 def predictions(data, tokenizer, model):
     all_preds = []
 
-    for sentence_tokens in data:
-        sentence_preds = []
-        chunks = chunk_tokens(sentence_tokens, max_len=510)  # BERT limit 512
+    for doc in data:
+        doc_preds = []
+        chunks = chunker(doc, max_len=50)  # BERT limit 512
 
         for chunk in chunks:
             encoding = tokenizer(chunk, return_tensors="pt", is_split_into_words=True,
-                                 truncation=True, padding=False)
+                                 truncation=True, padding=False).to(device)
+
+            # print(len(chunk), "words →", encoding.input_ids.shape[1], "subwords")
+
             with torch.no_grad():
                 outputs = model(**encoding)
                 logits = outputs.logits
                 pred_ids = torch.argmax(logits, dim=-1)
                 pred_labels = align_predictions(pred_ids, encoding, model)
-                sentence_preds.extend(pred_labels)
+                doc_preds.extend(pred_labels)
 
-        if len(sentence_preds) != len(sentence_tokens):
-            # Sometimes align_predictions may drop tokens; pad with 'O' to match length
-            diff = len(sentence_tokens) - len(sentence_preds)
-            sentence_preds.extend(['O'] * diff)
-
-        all_preds.append(sentence_preds)
+        all_preds.append(doc_preds)
     return all_preds
 
 

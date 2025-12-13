@@ -1,15 +1,12 @@
-# TODO: check size of CoNLL to compare with LitBank/OntoNotes training set
-# TODO: check where to correctly add to(device)
-# TODO: remove extraneous columns from data
-# TODO: add validation data for training
-
+# TODO: add validation data for training -- LitBank only to prioritize improvement?
+# Domain imbalance - weighted sampling?
 from transformers import (AutoTokenizer, AutoModelForTokenClassification,
                           TrainingArguments, Trainer,
                           DataCollatorForTokenClassification)
 from datasets import Dataset, load_from_disk, concatenate_datasets
 
 # Perchance create a separate dataloader file to avoid these imports and stuff
-from eval_bert_ner import litbank_data, split_data
+from evaluation import litbank_data, split_data, chunker
 
 label2id = {"O": 0, "B-PER": 1, "I-PER": 2, "B-LOC": 3, "I-LOC": 4, "B-ORG": 5, "I-ORG": 6}
 id2label = {0: "O", 1: "B-PER", 2: "I-PER", 3: "B-LOC", 4: "I-LOC", 5: "B-ORG", 6: "I-ORG"}
@@ -53,13 +50,16 @@ def token_label_alignment(features, labels, label2id):
 
 def tokenize_and_align(texts, labels):
     encodings = []
-    for text_segment, label_sequence in zip(texts, labels):
-        encoding = tokenizer(text_segment, is_split_into_words=True, truncation=True)
-        alignment = token_label_alignment(encoding, label_sequence, label2id)
+    for doc_label_pair in zip(texts, labels):
+        chunks = chunker(doc_label_pair)
 
-        encoding["labels"] = alignment
+        for text_segment, label_sequence in chunks:
+            encoding = tokenizer(text_segment, is_split_into_words=True, truncation=True)
+            alignment = token_label_alignment(encoding, label_sequence, label2id)
 
-        encodings.append(encoding)
+            encoding["labels"] = alignment
+
+            encodings.append(encoding)
 
     features = Dataset.from_list(encodings)
     return features
@@ -75,7 +75,7 @@ def main():
 
     litbank_feats = tokenize_and_align(litbank_train, litbank_train_labels)
     ontonotes_feats = tokenize_and_align(ontonotes_train, ontonotes_labels)
-    mixed_feats = concatenate_datasets([litbank_feats, ontonotes_feats])
+    mixed_feats = concatenate_datasets([litbank_feats, ontonotes_feats]).shuffle(seed=42)
 
     training_args = TrainingArguments(
         output_dir="./results",
