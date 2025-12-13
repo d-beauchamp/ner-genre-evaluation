@@ -1,10 +1,10 @@
 from transformers import AutoTokenizer, AutoModelForTokenClassification
-from sklearn.model_selection import train_test_split
 import torch
-from datasets import load_from_disk
 from seqeval.metrics import classification_report
 
-# TODO: remove MISC from test data to have direct comparison w/ finetuned labels
+from data_prep import load_splits, chunker
+
+# TODO: batch chunks to speed up OntoNotes?
 
 # GPU acceleration on Mac M1 using mps
 device = "cpu"
@@ -22,24 +22,9 @@ finetuned_model = AutoModelForTokenClassification.from_pretrained("./finetuned_m
 baseline_model.to(device).eval()
 finetuned_model.to(device).eval()
 
-litbank_data = load_from_disk("converted_datasets/litbank_dataset_test")
-# OntoNotes is test set only - no split needed
-ontonotes_data = load_from_disk("converted_datasets/ontonotes_dataset_test")
-
-
-def chunker(tokens, max_len=50):
-    """
-    Split token list into chunks under max BERT length of 512, leaving room for
-    CLS and SEP.
-    """
-    chunks = []
-    for i in range(0, len(tokens), max_len):
-        chunks.append(tokens[i:i + max_len])
-    return chunks
-
 
 def align_predictions(pred_ids, encoding, model):
-    """Maps subword predictions back to original token."""
+    """Map subword predictions back to original token."""
     word_ids = encoding.word_ids()
     previous_word_idx = None
     labels = []
@@ -50,7 +35,7 @@ def align_predictions(pred_ids, encoding, model):
             continue
         if word_idx != previous_word_idx:
             if temp_labels:
-                labels.append(temp_labels[0])
+                labels.append(temp_labels[0])  # First subword heuristic
                 temp_labels = []
             previous_word_idx = word_idx
         temp_labels.append(model.config.id2label[pred_ids[0, idx].item()])
@@ -60,15 +45,8 @@ def align_predictions(pred_ids, encoding, model):
     return labels
 
 
-def split_data(dataset):
-    tokens = dataset["tokens"]
-    labels = dataset["reduced_labels"]
-    X_train, X_test, y_train, y_test = train_test_split(tokens, labels,
-                                                        test_size=0.2, random_state=42)
-    return X_train, X_test, y_train, y_test
-
-
 def predictions(data, tokenizer, model):
+    """Tokenize and predict labels for chunks of inputs."""
     all_preds = []
 
     for doc in data:
@@ -78,8 +56,6 @@ def predictions(data, tokenizer, model):
         for chunk in chunks:
             encoding = tokenizer(chunk, return_tensors="pt", is_split_into_words=True,
                                  truncation=True, padding=False).to(device)
-
-            # print(len(chunk), "words →", encoding.input_ids.shape[1], "subwords")
 
             with torch.no_grad():
                 outputs = model(**encoding)
@@ -99,19 +75,19 @@ def model_eval(tokenizer, model, test_set, labels):
 
 
 def main():
-    litbank_split = split_data(litbank_data)
+    splits = load_splits()
 
-    litbank_test, litbank_labels = litbank_split[1], litbank_split[3]
-    ontonotes_test, ontonotes_labels = ontonotes_data["tokens"], ontonotes_data["reduced_labels"] # TEST Labels
+    litbank_test, litbank_test_labels = splits["litbank"]["test"]
+    ontonotes_test, ontonotes_labels = splits["ontonotes"]["test"]
 
     print("LitBank Evaluation (Baseline):")
-    model_eval(baseline_tokenizer, baseline_model, litbank_test, litbank_labels)
+    model_eval(baseline_tokenizer, baseline_model, litbank_test, litbank_test_labels)
 
     print("OntoNotes Evaluation (Baseline):")
     model_eval(baseline_tokenizer, baseline_model, ontonotes_test, ontonotes_labels)
 
     print("LitBank Evaluation (Finetuned):")
-    model_eval(finetuned_tokenizer, finetuned_model, litbank_test, litbank_labels)
+    model_eval(finetuned_tokenizer, finetuned_model, litbank_test, litbank_test_labels)
 
     print("OntoNotes Evaluation (Finetuned):")
     model_eval(finetuned_tokenizer, finetuned_model, ontonotes_test, ontonotes_labels)
