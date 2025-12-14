@@ -4,7 +4,7 @@ from seqeval.metrics import classification_report
 
 from data_prep import load_splits, chunker
 
-# TODO: batch chunks to speed up OntoNotes?
+# TODO: Calculation for genre difference F1?
 
 # GPU acceleration on Mac M1 using mps
 device = "cpu"
@@ -21,7 +21,6 @@ finetuned_model = AutoModelForTokenClassification.from_pretrained("./finetuned_m
 
 baseline_model.to(device).eval()
 finetuned_model.to(device).eval()
-
 
 def align_predictions(pred_ids, encoding, model):
     """Map subword predictions back to original token."""

@@ -2,7 +2,6 @@ from sklearn.model_selection import train_test_split
 from datasets import load_from_disk, concatenate_datasets
 
 litbank_data = load_from_disk("converted_datasets/litbank_dataset_test")
-# OntoNotes is test set only - no split needed
 ontonotes_test_data = load_from_disk("converted_datasets/ontonotes_dataset_test")
 ontonotes_train_sets = ["ontonotes_dataset_train00", "ontonotes_dataset_train01"]
 
@@ -26,18 +25,25 @@ def combine_and_extract_train_sets(dirs):
         loaded_file = load_from_disk(f"converted_datasets/{d}")
         loaded_datasets.append(loaded_file)
     combined_set = concatenate_datasets(loaded_datasets)
-    train, labels = combined_set["tokens"], combined_set["reduced_labels"]
+    train, labels = combined_set["tokens"], list(combined_set["reduced_labels"])
     return train, labels
 
 
-def chunker(tokens, max_len=50):
+def chunker(tokens, labels=None, max_len=50):
     """
     Split token list into chunks. Useful for LitBank inputs which are usually well over
     the BERT limit of 512.
     """
     chunks = []
     for i in range(0, len(tokens), max_len):
-        chunks.append(tokens[i:i + max_len])
+        token_chunk = tokens[i:i + max_len]
+
+        if labels is not None:
+            label_chunk = labels[i:i + max_len]
+            chunks.append((token_chunk, label_chunk))
+        else:
+            chunks.append(token_chunk)
+
     return chunks
 
 

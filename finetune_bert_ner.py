@@ -1,5 +1,4 @@
-# TODO: add validation data for training -- LitBank only to prioritize improvement?
-# Domain imbalance - weighted sampling?
+# TODO: add comments, type checking where appropriate
 from transformers import (AutoTokenizer, AutoModelForTokenClassification,
                           TrainingArguments, Trainer,
                           DataCollatorForTokenClassification)
@@ -37,12 +36,15 @@ def token_label_alignment(features, labels, label2id):
     return aligned_labels
 
 
-def tokenize_and_align(texts, labels):
+def tokenize_and_align(docs, all_labels):
     encodings = []
-    for doc_label_pair in zip(texts, labels):
-        chunks = chunker(doc_label_pair)
+    for doc, labels in zip(docs, all_labels):
+        chunks = chunker(doc, labels, max_len=50)
 
         for text_segment, label_sequence in chunks:
+            if label_sequence[0].startswith("I-"):
+                label_sequence[0] = "B-" + label_sequence[0][2:]
+
             encoding = tokenizer(text_segment, is_split_into_words=True, truncation=True)
             alignment = token_label_alignment(encoding, label_sequence, label2id)
 
@@ -61,19 +63,24 @@ def main():
     ontonotes_train, ontonotes_train_labels = splits["ontonotes"]["train"]
 
     litbank_feats = tokenize_and_align(litbank_train, litbank_train_labels)
+    litbank_feats_oversampled = concatenate_datasets([litbank_feats] * 3)
     ontonotes_feats = tokenize_and_align(ontonotes_train, ontonotes_train_labels)
-    mixed_training_feats = concatenate_datasets([litbank_feats, ontonotes_feats]).shuffle(seed=42)
+    mixed_training_feats = concatenate_datasets([litbank_feats_oversampled, ontonotes_feats]).shuffle(seed=42)
 
     val_tokens, val_labels = splits["litbank"]["validation"]
     val_feats = tokenize_and_align(val_tokens, val_labels)
 
     training_args = TrainingArguments(
-        output_dir="./results",
+        output_dir="./results2",
         eval_strategy="epoch",
+        save_strategy="epoch",
         learning_rate=3e-5,
         per_device_train_batch_size=8,
         num_train_epochs=3,
-        weight_decay=0.01
+        weight_decay=0.01,
+        load_best_model_at_end=True,
+        metric_for_best_model="eval_loss",
+        greater_is_better=False
     )
 
     trainer = Trainer(
@@ -87,11 +94,11 @@ def main():
 
     # trainer.train()
 
-    """finetuned_tokenizer = AutoTokenizer.from_pretrained("./results/checkpoint-11280")
-    finetuned_model = AutoModelForTokenClassification.from_pretrained("./results/checkpoint-11280")
+    # finetuned_tokenizer = AutoTokenizer.from_pretrained("./results2/checkpoint-5024")
+    # finetuned_model = AutoModelForTokenClassification.from_pretrained("./results2/checkpoint-5024")
 
-    finetuned_tokenizer.save_pretrained("./finetuned_model")
-    finetuned_model.save_pretrained("./finetuned_model")"""
+    # finetuned_tokenizer.save_pretrained("./finetuned_model")
+    # finetuned_model.save_pretrained("./finetuned_model")
 
 
 if __name__ == "__main__":

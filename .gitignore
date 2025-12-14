@@ -1,4 +1,5 @@
 venv/
 results/
+results2/
 finetuned_model/
 test.py
