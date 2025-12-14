@@ -18,6 +18,6 @@ To run training and evaluation, follow the steps below:
 ```
 4. Run the evaluation script:
   ```bash
-  python evaluation.py.
+  python evaluation.py
 ```
   * This may take a while!   
