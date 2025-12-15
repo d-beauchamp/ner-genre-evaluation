@@ -3,6 +3,7 @@
 from datasets import Dataset
 import glob
 
+# OntoNotes ID to label mapping
 ontonotes_id2label = {
     0: "O",
     1: "B-CARDINAL",
@@ -66,6 +67,7 @@ def load_litbank_data(path: str) -> Dataset:
 
 
 def load_ontonotes_data(path: str) -> Dataset:
+    "Load OntoNotes dataset and map IDs to labels."
     ontonotes_dataset = Dataset.from_json(path)
     return ontonotes_dataset.map(lambda x: {"labels": [ontonotes_id2label.get(t) for t in x["tags"]]})
 
@@ -102,16 +104,19 @@ def simplify_labels(dataset):
 
 print("mapping and saving datasets...")
 
+# Load, process, and save LitBank test dataset https://github.com/dbamman/litbank
 litbank_dataset_test = load_litbank_data("LitBank/entities/tsv/*.tsv")
 litbank_dataset_test = litbank_dataset_test.map(simplify_labels)
 litbank_dataset_test = litbank_dataset_test.map(reduce_labels)
 litbank_dataset_test.save_to_disk("converted_datasets/litbank_dataset_test")
 
+# Load, process, and save OntoNotes datasets https://huggingface.co/datasets/tner/ontonotes5
 ontonotes_dataset_test = load_ontonotes_data("OntoNotes/dataset/test.json")
 ontonotes_dataset_test = ontonotes_dataset_test.map(simplify_labels)
 ontonotes_dataset_test = ontonotes_dataset_test.map(reduce_labels)
 ontonotes_dataset_test.save_to_disk("converted_datasets/ontonotes_dataset_test")
 
+# Process and save OntoNotes training splits
 for split in ["00", "01", "02", "03"]:
     ontonotes_dataset_train = load_ontonotes_data(f"OntoNotes/dataset/train{split}.json")
     ontonotes_dataset_train = ontonotes_dataset_train.map(simplify_labels)
