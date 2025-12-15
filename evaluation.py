@@ -1,10 +1,8 @@
 from transformers import AutoTokenizer, AutoModelForTokenClassification
 import torch
-from seqeval.metrics import classification_report
+from seqeval.metrics import classification_report, f1_score
 
 from data_prep import load_splits, chunker
-
-# TODO: Calculation for genre difference F1?
 
 # GPU acceleration on Mac M1 using mps
 device = "cpu"
@@ -21,6 +19,7 @@ finetuned_model = AutoModelForTokenClassification.from_pretrained("./finetuned_m
 
 baseline_model.to(device).eval()
 finetuned_model.to(device).eval()
+
 
 def align_predictions(pred_ids, encoding, model):
     """Map subword predictions back to original token."""
@@ -50,9 +49,15 @@ def predictions(data, tokenizer, model):
 
     for doc in data:
         doc_preds = []
-        chunks = chunker(doc, max_len=50)  # BERT limit 512
+
+        # Chunk input documents into chunks of 50 words
+        # Especially important for LitBank inputs, whose ~2000 word length far exceeds
+        # the BERT limit of 512 even before subword tokenization
+        chunks = chunker(doc, max_len=50)
 
         for chunk in chunks:
+
+            # Inputs are already split into word tokens
             encoding = tokenizer(chunk, return_tensors="pt", is_split_into_words=True,
                                  truncation=True, padding=False).to(device)
 
@@ -73,7 +78,20 @@ def model_eval(tokenizer, model, test_set, labels):
     print(classification_report(labels, preds))
 
 
+def domain_f1_difference(tokenizer, model, test1, labels1, test2, labels2):
+    """Calculate difference in F1 score between domains."""
+    preds_litbank = predictions(test1, tokenizer, model)
+    preds_ontonotes = predictions(test2, tokenizer, model)
+
+    f1_litbank = f1_score(labels1, preds_litbank, average="weighted")
+    f1_ontonotes = f1_score(labels2, preds_ontonotes, average="weighted")
+    print(f1_ontonotes - f1_litbank)
+
+
 def main():
+    """Print classification reports and F1 domain differences for both baseline
+    and finetuned models, using predefined test splits."""
+
     splits = load_splits()
 
     litbank_test, litbank_test_labels = splits["litbank"]["test"]
@@ -90,6 +108,14 @@ def main():
 
     print("OntoNotes Evaluation (Finetuned):")
     model_eval(finetuned_tokenizer, finetuned_model, ontonotes_test, ontonotes_labels)
+
+    print("Domain F1 Difference (Baseline):")
+    domain_f1_difference(baseline_tokenizer, baseline_model, litbank_test, litbank_test_labels,
+                         ontonotes_test, ontonotes_labels)
+
+    print("Domain F1 Difference (Finetuned):")
+    domain_f1_difference(finetuned_tokenizer, finetuned_model, litbank_test, litbank_test_labels,
+                         ontonotes_test, ontonotes_labels)
 
 
 if __name__ == "__main__":

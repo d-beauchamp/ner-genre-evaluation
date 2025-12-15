@@ -7,7 +7,7 @@ ontonotes_train_sets = ["ontonotes_dataset_train00", "ontonotes_dataset_train01"
 
 
 def split_train_val_test(dataset):
-    """Split labels and tokens into test and train sets."""
+    """Split labels and tokens into train, validation, and test sets."""
     tokens = dataset["tokens"]
     labels = dataset["reduced_labels"]
     X_temp, X_test, y_temp, y_test = train_test_split(tokens, labels,
@@ -20,6 +20,7 @@ def split_train_val_test(dataset):
 
 
 def combine_and_extract_train_sets(dirs):
+    """Load and combine multiple data files into one set, then return combined tokens and labels."""
     loaded_datasets = []
     for d in dirs:
         loaded_file = load_from_disk(f"converted_datasets/{d}")
@@ -30,15 +31,13 @@ def combine_and_extract_train_sets(dirs):
 
 
 def chunker(tokens, labels=None, max_len=50):
-    """
-    Split token list into chunks. Useful for LitBank inputs which are usually well over
-    the BERT limit of 512.
-    """
+    """Split tokens, and optionally labels, into chunks. Useful for LitBank inputs
+    which are well over the BERT limit of 512."""
     chunks = []
     for i in range(0, len(tokens), max_len):
         token_chunk = tokens[i:i + max_len]
 
-        if labels is not None:
+        if labels is not None:  # Chunk labels if provided (used for training)
             label_chunk = labels[i:i + max_len]
             chunks.append((token_chunk, label_chunk))
         else:
@@ -48,6 +47,10 @@ def chunker(tokens, labels=None, max_len=50):
 
 
 def load_splits():
+    """Split the initial data for each domain into train and test (and validation for LitBank),
+    each with corresponding labels and tokens.
+
+    Returns a dictionary with splits per domain."""
     litbank_split = split_train_val_test(litbank_data)
     litbank_train, litbank_train_labels = litbank_split[0], litbank_split[3]
     val_tokens, val_labels = litbank_split[1], litbank_split[4]
@@ -55,7 +58,7 @@ def load_splits():
 
     ontonotes_train, ontonotes_train_labels = combine_and_extract_train_sets(ontonotes_train_sets)
     ontonotes_test, ontonotes_test_labels = (ontonotes_test_data["tokens"],
-                                        ontonotes_test_data["reduced_labels"])
+                                             ontonotes_test_data["reduced_labels"])
 
     return {
         "litbank": {

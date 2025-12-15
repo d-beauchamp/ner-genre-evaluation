@@ -44,6 +44,7 @@ ontonotes_id2label = {
 }
 
 def load_litbank_data(path: str) -> Dataset:
+    "Clean and extract data from LitBank."
     all_data_litbank = []
     for f in glob.glob(path):
         tokens = [] 
@@ -63,16 +64,19 @@ def load_litbank_data(path: str) -> Dataset:
 
     return Dataset.from_list(all_data_litbank)
 
+
 def load_ontonotes_data(path: str) -> Dataset:
     ontonotes_dataset = Dataset.from_json(path)
     return ontonotes_dataset.map(lambda x: {"labels": [ontonotes_id2label.get(t) for t in x["tags"]]})
 
 
 def reduce_labels(dataset):
+    """Extract PER, LOC, and ORG labels, maintaining BIO prefixes and ensuring
+    standardized length."""
     reduced = []
     for label in dataset["labels"]:
         if label.startswith("B-") or label.startswith("I-"):
-            label = label[:5]
+            label = label[:5]  # PER label is PERSON in OntoNotes
         if label.endswith("PER") or label.endswith("LOC") or label.endswith("ORG"):
             reduced.append(label)
         else:
@@ -81,6 +85,7 @@ def reduce_labels(dataset):
     return dataset
 
 def simplify_labels(dataset):
+    """Extract PER, LOC, and ORG labels."""
     simple = []
     for label in dataset["labels"]:
         if label.endswith("PER"):
